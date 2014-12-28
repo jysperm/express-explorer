@@ -1,0 +1,25 @@
+{
+  "name": "express-explorer",
+  "version": "0.1.0",
+  "description": "Generate API document from express meta data.",
+  "homepage": "https://github.com/jysperm/express-explorer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jysperm/express-explorer.git"
+  },
+  "contributors": [
+    {
+      "name": "jysperm",
+      "email": "jysperm@gmail.com",
+      "url": "http://jysperm.me"
+    }
+  ],
+  "dependencies": {
+    "coffee-script": "^1.7.1",
+    "express": "^4.9.1",
+    "js-beautify": "^1.5.4",
+    "pluralize": "^1.1.0",
+    "underscore": "^1.7.0"
+  }
+}

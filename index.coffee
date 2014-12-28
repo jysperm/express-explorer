@@ -6,6 +6,9 @@ fs = require 'fs'
 _ = require 'underscore'
 
 fixPath = (path) ->
+  unless path
+    return '/'
+
   if path[... 2] == '//'
     return path[1 ...]
 
@@ -54,7 +57,7 @@ parseMiddlewareName = (callsite) ->
 module.exports = (options = {}) ->
   {port, ip} = options
 
-  middleware_source:
+  middleware_source =
     'Source Code': 'name'
 
   app_info =
@@ -65,7 +68,7 @@ module.exports = (options = {}) ->
       name: 'serveStatic'
       source: ''
     ]
-    router: [
+    routers: [
       path: '/account/login'
       method: 'GET'
     ]
@@ -99,7 +102,7 @@ module.exports = (options = {}) ->
       empty: false
       settings: app.settings
       middleware: middlewares
-      router: routers
+      routers: routers
 
   injectExpress =  ->
     original_use = express.Router.use
@@ -114,14 +117,55 @@ module.exports = (options = {}) ->
 
         for func in functions
           func.middleware_name = parseMiddlewareName callsite
+          middleware_source[funcSource(func)] = parseMiddlewareName callsite
 
       original_use.apply @, arguments
+
+    console.log middleware_source
 
   createExplorerServer = ->
     explorer = express()
 
     explorer.get '/', (req, res) ->
-      res.json app_info
+
+      router = {}
+
+      for r in app_info.routers
+        console.log r.source
+        middleware = middleware_source[r.source]
+
+        router[r.path] ?= {}
+
+        if router[r.path][r.method]
+          if middleware
+            router[r.path][r.method].middlewares.push middleware
+
+          else if !router[r.path][r.method].source
+            _.extend router[r.path][r.method],
+              source: r.source
+
+          else
+            source = router[r.path][r.method].source
+
+            unless _.isArray source
+              source = [source]
+
+            source.push r.source
+
+            _.extend router[r.path][r.method],
+              source: source
+
+        else
+          if middleware
+            router[r.path][r.method] =
+              middlewares: [middleware]
+          else
+            router[r.path][r.method] =
+              source: r.source
+              middlewares: []
+
+      res.json _.extend app_info,
+        router: router
 
     if ip != undefined
       explorer.listen (port ? 1839), ip

@@ -3,6 +3,15 @@ express = require 'express'
 fs = require 'fs'
 _ = require 'underscore'
 
+fixPath = (path) ->
+  if path[... 2] == '//'
+    return path[1 ...]
+
+  if path[-1 ...] == '/'
+    return path[... -1]
+
+  return path
+
 formatPathRegex = (regex, base = '') ->
   format = ->
     regex.toString()
@@ -15,10 +24,10 @@ formatPathRegex = (regex, base = '') ->
   if regex
     path = base + format regex
 
-    if path
-      return path
-    else
+    unless path
       return '/'
+
+    return fixPath path
   else
     return '/'
 
@@ -52,11 +61,12 @@ module.exports = (options = {}) ->
         if layer.route
           for route_layer in layer.route.stack
             routers.push
-              path: base + layer.route.path
+              path: fixPath base + layer.route.path
               method: route_layer.method.toUpperCase()
               source: funcSource route_layer.handle
         else if layer.handle.stack
-          reflectRouter layer.handle, formatPathRegex(layer.regexp)
+          base_path = base + formatPathRegex(layer.regexp)
+          reflectRouter layer.handle, base_path
         else
           middlewares.push
             path: formatPathRegex layer.regexp, base

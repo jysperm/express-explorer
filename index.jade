@@ -1,0 +1,46 @@
+doctype html
+html
+  head
+    meta(charset='utf-8')
+    link(href="/bower_components/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet")
+    link(href="/assets/app.css" rel="stylesheet")
+    if package
+      title= package.name
+    else
+      title Document
+
+  body
+    nav.navbar.navbar-default
+      .container
+        .navbar-header
+          if package
+            h1= package.name
+            span.version= package.version
+            p.description= package.description
+          else
+            h1 Document
+    .container
+      .row
+        .col-md-3.sidebar(data-spy="affix" data-offset-top="60" data-offset-bottom="200")
+          ul
+            li
+              a(href="#overview") Overview
+            li
+              a(href="#middleware") Middleware
+            li
+              a(href="#endpoints") Endpoints
+            li
+              a(href="#support") Support
+        .main.col-md-9.pull-right
+          #router
+            each one, index in routers
+              section.route
+                h2
+                  span.method= one.method
+                  span.url= one.path
+                  a.button(data-toggle="collapse" href="#source-"+index aria-expanded="false") View Source
+                pre.source.collapse(id="source-"+index)= one.source
+
+
+    script(src="/bower_components/jquery/dist/jquery.min.js")
+    script(src="/bower_components/bootstrap/dist/js/bootstrap.min.js")

@@ -1,0 +1,88 @@
+body {
+  font-family: 'Source Sans Pro','Lucida Grande',sans-serif;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+
+
+.sidebar{
+  padding-right: 0;
+  background-color: #F7F7F7;
+  border: 1px solid #C3CFD9;
+  border-bottom: 0;
+  box-shadow: 0 1px 0px rgba(0, 0, 0, 0.05);
+  width: 256px;
+  padding: 0;
+  margin-left: 15px;
+}
+
+.sidebar ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.sidebar li{
+  position: relative;
+  margin: 0;
+  background: #F9F9F9
+}
+
+.sidebar li > a{
+  font-size: 14px;
+  text-decoration: none;
+  position: relative;
+  display: block;
+  padding: 9px 5px 10px 15px;
+  border-bottom: 1px solid #C3CFD9;
+}
+
+.route{
+  margin-bottom: 2em;
+}
+
+.route > h2 {
+  color: #fff;
+  font-size: 14px;
+  padding: 8px 5px 8px 70px;
+  min-height: 32px;
+  position: relative;
+  margin: -1px -1px 0;
+  border: 1px solid #1C5380;
+  border: 1px solid #7C7C7C;
+  background-color: #969696;
+  background-image: -webkit-linear-gradient(top, #ABABAB, #818283);
+  border-radius: 3px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+
+.route > h2 .method{
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 100%;
+  margin: 0 15px 0 0;
+  border-right: 1px solid #7C7C7C;
+  border-radius: 4px 0 0 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset, 1px 0 0 rgba(255, 255, 255, 0.1);
+  background-color: #848484;
+  text-align: center;
+  line-height: 14px;
+  padding: 9px 0 0;
+}
+
+.route > h2 .button{
+  font-size: 12px;
+  background: #EAEAEA;
+  color: #666;
+  text-shadow: none;
+  display: inline-block;
+  padding: 2px 5px;
+  border-radius: 4px;
+  float: right;
+  border: 1px solid #868686;
+  margin-top: -2px;
+}

@@ -127,7 +127,6 @@ module.exports = (options = {}) ->
     explorer = express()
 
     explorer.get '/', (req, res) ->
-
       router = {}
 
       for r in app_info.routers
@@ -164,13 +163,17 @@ module.exports = (options = {}) ->
               source: r.source
               middlewares: []
 
-      res.json _.extend app_info,
+      res.render __dirname + '/index.jade', _.extend app_info,
         router: router
 
+    explorer.use '/assets', express.static __dirname + '/assets'
+    explorer.use '/bower_components', express.static __dirname + '/bower_components'
+    
     if ip != undefined
       explorer.listen (port ? 1839), ip
     else
-      explorer.listen (port ? 1839), '127.0.0.1'
+      explorer.listen (port ? 1839), '127.0.0.1', ->
+        console.log "sss"
 
   createExplorerServer()
   injectExpress()

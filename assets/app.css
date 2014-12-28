@@ -5,9 +5,7 @@ body {
   padding: 0;
 }
 
-
 .sidebar{
-  padding-right: 0;
   background-color: #F7F7F7;
   border: 1px solid #C3CFD9;
   border-bottom: 0;
@@ -49,10 +47,8 @@ body {
   min-height: 32px;
   position: relative;
   margin: -1px -1px 0;
-  border: 1px solid #1C5380;
   border: 1px solid #7C7C7C;
-  background-color: #969696;
-  background-image: -webkit-linear-gradient(top, #ABABAB, #818283);
+  background: #969696 -webkit-linear-gradient(top, #ABABAB, #818283);
   border-radius: 3px;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
   -webkit-font-smoothing: subpixel-antialiased;

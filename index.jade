@@ -7,7 +7,7 @@ html
     if package
       title= package.name
     else
-      title Document
+      title API Document
 
   body
     nav.navbar.navbar-default
@@ -31,6 +31,7 @@ html
               a(href="#endpoints") Endpoints
             li
               a(href="#support") Support
+
         .main.col-md-9.pull-right
           #router
             each one, index in routers
@@ -38,9 +39,8 @@ html
                 h2
                   span.method= one.method
                   span.url= one.path
-                  a.button(data-toggle="collapse" href="#source-"+index aria-expanded="false") View Source
-                pre.source.collapse(id="source-"+index)= one.source
-
+                  a.button(data-toggle="collapse" href="#source-#{index}" aria-expanded="false") View Source
+                pre.source.collapse(id="source-#{index}")= one.source
 
     script(src="/bower_components/jquery/dist/jquery.min.js")
     script(src="/bower_components/bootstrap/dist/js/bootstrap.min.js")

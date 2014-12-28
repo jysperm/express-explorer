@@ -12,7 +12,7 @@ fixPath = (path) ->
   if path[... 2] == '//'
     return path[1 ...]
 
-  if path[-1 ...] == '/'
+  if path[-1 ...] == '/' and path.length > 1
     return path[... -1]
 
   return path
@@ -121,50 +121,53 @@ module.exports = (options = {}) ->
 
       original_use.apply @, arguments
 
-    console.log middleware_source
+  organizeRouter = ->
+    router = {}
+
+    for r in app_info.routers
+      middleware = middleware_source[r.source]
+
+      router[r.path] ?= {}
+
+      if router[r.path][r.method]
+        if middleware
+          router[r.path][r.method].middlewares.push middleware
+
+        else if !router[r.path][r.method].source
+          _.extend router[r.path][r.method],
+            source: r.source
+
+        else
+          source = router[r.path][r.method].source
+
+          unless _.isArray source
+            source = [source]
+
+          source.push r.source
+
+          _.extend router[r.path][r.method],
+            source: source
+
+      else
+        if middleware
+          router[r.path][r.method] =
+            middlewares: [middleware]
+        else
+          router[r.path][r.method] =
+            source: r.source
+            middlewares: []
+
+    return router
 
   createExplorerServer = ->
     explorer = express()
 
     explorer.get '/', (req, res) ->
-      router = {}
-
-      for r in app_info.routers
-        console.log r.source
-        middleware = middleware_source[r.source]
-
-        router[r.path] ?= {}
-
-        if router[r.path][r.method]
-          if middleware
-            router[r.path][r.method].middlewares.push middleware
-
-          else if !router[r.path][r.method].source
-            _.extend router[r.path][r.method],
-              source: r.source
-
-          else
-            source = router[r.path][r.method].source
-
-            unless _.isArray source
-              source = [source]
-
-            source.push r.source
-
-            _.extend router[r.path][r.method],
-              source: source
-
-        else
-          if middleware
-            router[r.path][r.method] =
-              middlewares: [middleware]
-          else
-            router[r.path][r.method] =
-              source: r.source
-              middlewares: []
-
       res.render __dirname + '/index.jade', _.extend app_info,
-        router: router
+        router: organizeRouter()
+
+    explorer.get '/.json', (req, res) ->
+      res.json organizeRouter()
 
     explorer.use '/assets', express.static __dirname + '/assets'
     explorer.use '/bower_components', express.static __dirname + '/bower_components'
@@ -172,8 +175,7 @@ module.exports = (options = {}) ->
     if ip != undefined
       explorer.listen (port ? 1839), ip
     else
-      explorer.listen (port ? 1839), '127.0.0.1', ->
-        console.log "sss"
+      explorer.listen (port ? 1839), '127.0.0.1'
 
   createExplorerServer()
   injectExpress()

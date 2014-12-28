@@ -1,31 +1,75 @@
 jsBeautify = (require 'js-beautify').js_beautify
 express = require 'express'
+fs = require 'fs'
 _ = require 'underscore'
+
+formatPathRegex = (regex, base = '') ->
+  format = ->
+    regex.toString()
+    .replace /^\/\^/, ''
+    .replace /\/i?$/, ''
+    .replace /\\/g, ''
+    .replace '/?(?=/|$)', ''
+    .replace /\/$/, ''
+
+  if regex
+    path = base + format regex
+
+    if path
+      return path
+    else
+      return '/'
+  else
+    return '/'
+
+funcSource = (func) ->
+  return jsBeautify func.toString()
 
 module.exports = (options = {}) ->
   {port, ip} = options
 
   app_info =
     empty: true
+    package: JSON.parse fs.readFileSync('./package.json').toString()
     settings: {}
-    global_middleware: []
-    router_description: []
-    api_description: []
+    middleware: [
+      name: 'serveStatic'
+      source: ''
+    ]
+    router: [
+      path: '/account/login'
+      method: 'GET'
+    ]
 
   reflectApp = (app) ->
-    global_middleware = _.filter app._router.stack, (layer) ->
-      return layer.regexp.test '/'
+    middlewares = []
+    routers = []
 
-    global_middleware = _.map global_middleware, (layer) ->
-      return {
-        name: layer.name
-        source: jsBeautify layer.handle.toString()
-      }
+    reflectRouter = (router, base = '') ->
+      base = '' if base == '/'
+
+      for layer in router.stack
+        if layer.route
+          for route_layer in layer.route.stack
+            routers.push
+              path: base + layer.route.path
+              method: route_layer.method.toUpperCase()
+              source: funcSource route_layer.handle
+        else if layer.handle.stack
+          reflectRouter layer.handle, formatPathRegex(layer.regexp)
+        else
+          middlewares.push
+            path: formatPathRegex layer.regexp, base
+            name: layer.name
+            source: funcSource layer.handle
+
+    reflectRouter app._router
 
     _.extend app_info,
       empty: false
       settings: app.settings
-      global_middleware: global_middleware
+      middleware: middlewares
+      router: routers
 
   createExplorerServer = ->
     explorer = express()

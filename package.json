@@ -17,9 +17,9 @@
   ],
   "dependencies": {
     "coffee-script": "^1.7.1",
-    "express": "^4.9.1",
     "js-beautify": "^1.5.4",
     "pluralize": "^1.1.0",
+    "stack-trace": "0.0.9",
     "underscore": "^1.7.0"
   }
 }

@@ -1,4 +1,6 @@
 jsBeautify = (require 'js-beautify').js_beautify
+coffeescript = require 'coffee-script'
+stacktrace = require 'stack-trace'
 express = require 'express'
 fs = require 'fs'
 _ = require 'underscore'
@@ -34,8 +36,26 @@ formatPathRegex = (regex, base = '') ->
 funcSource = (func) ->
   return jsBeautify func.toString()
 
+readFileLine = (filename, line) ->
+  body = fs.readFileSync(filename).toString()
+
+  if filename[-6 ...] == 'coffee'
+    return coffeescript.compile(body).split('\n')[line - 1]
+  else
+    return body.split('\n')[line - 1]
+
+parseMiddlewareName = (callsite) ->
+  line = readFileLine callsite.getFileName(), callsite.getLineNumber()
+  line.match(/use\((.+)?/)[1]
+  .replace /\);$/, ''
+  .replace /\{$/, ''
+  .replace /\s+$/, ''
+
 module.exports = (options = {}) ->
   {port, ip} = options
+
+  middleware_source:
+    'Source Code': 'name'
 
   app_info =
     empty: true
@@ -70,7 +90,7 @@ module.exports = (options = {}) ->
         else
           middlewares.push
             path: formatPathRegex layer.regexp, base
-            name: layer.name
+            name: if layer.name != '<anonymous>' then layer.name else layer.handle.middleware_name
             source: funcSource layer.handle
 
     reflectRouter app._router
@@ -81,6 +101,22 @@ module.exports = (options = {}) ->
       middleware: middlewares
       router: routers
 
+  injectExpress =  ->
+    original_use = express.Router.use
+
+    express.Router.use = ->
+      callsite = _.first _.filter stacktrace.get()[1 ...], (c) ->
+        return c.getFileName()[-6 ...] == 'coffee'
+
+      if callsite
+        functions = _.filter arguments, _.isFunction
+        functions = _.reject functions, (f) -> f.stack
+
+        for func in functions
+          func.middleware_name = parseMiddlewareName callsite
+
+      original_use.apply @, arguments
+
   createExplorerServer = ->
     explorer = express()
 
@@ -90,9 +126,10 @@ module.exports = (options = {}) ->
     if ip != undefined
       explorer.listen (port ? 1839), ip
     else
-      explorer.listen (port ? 1839)
+      explorer.listen (port ? 1839), '127.0.0.1'
 
   createExplorerServer()
+  injectExpress()
 
   return (req, res, next) ->
     if app_info.empty

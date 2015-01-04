@@ -1,16 +1,19 @@
-jsBeautify = (require 'js-beautify').js_beautify
+{js_beautify: jsBeautify} = require 'js-beautify'
 coffeescript = require 'coffee-script'
 stacktrace = require 'stack-trace'
+js2coffee = require 'js2coffee'
+methods = require 'methods'
 express = require 'express'
+path = require 'path'
 fs = require 'fs'
 _ = require 'underscore'
 
-fixPath = (path) ->
+formatPath = (path) ->
   unless path
     return '/'
 
-  if path[... 2] == '//'
-    return path[1 ...]
+  while path[... 2] == '//'
+    path = path[1 ...]
 
   if path[-1 ...] == '/' and path.length > 1
     return path[... -1]
@@ -27,161 +30,174 @@ formatPathRegex = (regex, base = '') ->
     .replace /\/$/, ''
 
   if regex
-    path = base + format regex
-
-    unless path
-      return '/'
-
-    return fixPath path
+    return formatPath base + format regex
   else
     return '/'
 
-funcSource = (func) ->
-  return jsBeautify func.toString()
-
-readFileLine = (filename, line) ->
-  body = fs.readFileSync(filename).toString()
-
-  if filename[-6 ...] == 'coffee'
-    return coffeescript.compile(body).split('\n')[line - 1]
-  else
-    return body.split('\n')[line - 1]
-
-parseMiddlewareName = (callsite) ->
-  line = readFileLine callsite.getFileName(), callsite.getLineNumber()
-  line.match(/use\((.+)?/)[1]
-  .replace /\);$/, ''
-  .replace /\{$/, ''
-  .replace /\s+$/, ''
-
 module.exports = (options = {}) ->
-  {port, ip} = options
+  options = _.extend {
+    ip: '127.0.0.1'
+    port: 1839
+    app_root: '.'
+    app_excludes: [/^node_modules/]
+    coffeescript: true
+  }, options
 
-  middleware_source =
-    'Source Code': 'name'
-
-  app_info =
-    empty: true
-    package: JSON.parse fs.readFileSync('./package.json').toString()
+  specification =
+    package: {}
     settings: {}
-    middleware: [
-      name: 'serveStatic'
-      source: ''
-    ]
-    routers: [
-      path: '/account/login'
-      method: 'GET'
-    ]
+    middlewares: []
+    routers: []
+    router: {}
 
-  reflectApp = (app) ->
-    middlewares = []
-    routers = []
-
-    reflectRouter = (router, base = '') ->
-      base = '' if base == '/'
-
-      for layer in router.stack
-        if layer.route
-          for route_layer in layer.route.stack
-            routers.push
-              path: fixPath base + layer.route.path
-              method: route_layer.method.toUpperCase()
-              source: funcSource route_layer.handle
-        else if layer.handle.stack
-          base_path = base + formatPathRegex(layer.regexp)
-          reflectRouter layer.handle, base_path
-        else
-          middlewares.push
-            path: formatPathRegex layer.regexp, base
-            name: if layer.name != '<anonymous>' then layer.name else layer.handle.middleware_name
-            source: funcSource layer.handle
-
-    reflectRouter app._router
-
-    _.extend app_info,
-      empty: false
-      settings: app.settings
-      middleware: middlewares
-      routers: routers
-
-  injectExpress =  ->
-    original_use = express.Router.use
-
-    express.Router.use = ->
-      callsite = _.first _.filter stacktrace.get()[1 ...], (c) ->
-        return c.getFileName()[-6 ...] == 'coffee'
-
-      if callsite
-        functions = _.filter arguments, _.isFunction
-        functions = _.reject functions, (f) -> f.stack
-
-        for func in functions
-          func.middleware_name = parseMiddlewareName callsite
-          middleware_source[funcSource(func)] = parseMiddlewareName callsite
-
-      original_use.apply @, arguments
-
-  organizeRouter = ->
-    router = {}
-
-    for r in app_info.routers
-      middleware = middleware_source[r.source]
-
-      router[r.path] ?= {}
-
-      if router[r.path][r.method]
-        if middleware
-          router[r.path][r.method].middlewares.push middleware
-
-        else if !router[r.path][r.method].source
-          _.extend router[r.path][r.method],
-            source: r.source
-
-        else
-          source = router[r.path][r.method].source
-
-          unless _.isArray source
-            source = [source]
-
-          source.push r.source
-
-          _.extend router[r.path][r.method],
-            source: source
-
-      else
-        if middleware
-          router[r.path][r.method] =
-            middlewares: [middleware]
-        else
-          router[r.path][r.method] =
-            source: r.source
-            middlewares: []
-
-    return router
+  middleware = (req, res, next) ->
+    next()
 
   createExplorerServer = ->
     explorer = express()
 
     explorer.get '/', (req, res) ->
-      res.render __dirname + '/index.jade', _.extend app_info,
-        router: organizeRouter()
+      res.render __dirname + '/index.jade', specification
 
     explorer.get '/.json', (req, res) ->
-      res.json organizeRouter()
+      res.json specification
+
+    explorer.get '/.markdown', (req, res) ->
+      res.sendStatus 404
 
     explorer.use '/assets', express.static __dirname + '/assets'
     explorer.use '/bower_components', express.static __dirname + '/bower_components'
-    
-    if ip != undefined
-      explorer.listen (port ? 1839), ip
+
+    explorer.listen options.port, options.ip
+
+  injectExpress = ->
+    app_root = path.resolve options.app_root
+
+    original =
+      use: express.Router.use
+      listen: express.application.listen
+
+    express.Router.use = ->
+      callsite = _.find stacktrace.get()[1 ...], (site) ->
+        filename = site.getFileName()
+
+        return filename[... app_root.length] == app_root and
+          _.every options.app_excludes, (exclude) ->
+            return !exclude.test filename[app_root.length + 1 ...]
+
+      if callsite
+        _.chain(arguments)
+        .filter _.isFunction
+        .reject (func) -> func.stack
+        .each (func) ->
+          _.extend func,
+            middleware_name: parseMiddlewareName callsite
+
+      original.use.apply @, arguments
+
+    express.application.listen = ->
+      reflectExpress @
+      original.listen.apply @, arguments
+
+  readPackage = ->
+    filename = path.join path.resolve(options.app_root), 'package.json'
+
+    fs.exists filename, (exists) ->
+      if exists
+        fs.readFile filename, (err, body) ->
+          unless err
+            specification.package = JSON.parse body
+
+  formatSource = (func) ->
+    if options.coffeescript
+      source = 'f = ' + func.toString()
+
+      source = js2coffee.build source,
+        single_quotes: true
+
+      return source[4 ...]
     else
-      explorer.listen (port ? 1839), '127.0.0.1'
+      return jsBeautify func.toString()
+
+  readFileLine = (filename, line) ->
+    body = fs.readFileSync(filename).toString()
+
+    if filename[-6 ...] == 'coffee'
+      return coffeescript.compile(body).split('\n')[line - 1]
+    else
+      return body.split('\n')[line - 1]
+
+  parseMiddlewareName = (callsite) ->
+    line = readFileLine callsite.getFileName(), callsite.getLineNumber()
+
+    if options.coffeescript
+      return line.match(/use\((.+)?/)[1]
+      .replace /\);$/, ''
+      .replace /\{$/, ''
+      .replace /\s+$/, ''
+    else
+      return line
+
+  reflectRouter = (router, base = '/') ->
+    for layer in router.stack
+      if layer.route
+        for route_layer in layer.route.stack
+          specification.routers.push
+            path: formatPath base + layer.route.path
+            method: route_layer.method.toUpperCase()
+            source: formatSource route_layer.handle
+            handle: route_layer.handle
+
+      else if layer.handle.stack
+        reflectRouter layer.handle, formatPathRegex(layer.regexp, base)
+
+      else
+        specification.middlewares.push
+          path: formatPathRegex layer.regexp, base
+          name: if layer.name != '<anonymous>' then layer.name else layer.handle.middleware_name
+          source: formatSource layer.handle
+          handle: layer.handle
+
+  organizeRouter = ->
+    _.extend specification,
+      router: {}
+
+#    onlyMethodChild = (ref) ->
+#      return _.isEmpty _.reject _.keys(ref), (key) ->
+#        return key.toLowerCase() in methods
+
+    for router in specification.routers
+      path_parts = _.compact router.path.split '/'
+#      path_parts = ['/'] if _.isEmpty path_parts
+      ref = specification.router
+
+      for part in path_parts
+        ref[part] ?= {}
+        ref = ref[part]
+
+#      unless onlyMethodChild ref
+#        ref['/'] ?= {}
+#        ref = ref['/']
+
+      ref[router.method] ?=
+        routers: []
+
+      ref[router.method].routers.push _.extend router,
+        name: router.handle.name
+        middleware_name: router.handle.middleware_name
+
+  reflectExpress = (app) ->
+    _.extend specification,
+      settings: app.settings
+      middlewares: []
+      routers: []
+
+    reflectRouter app._router
+    organizeRouter()
 
   createExplorerServer()
   injectExpress()
+  readPackage()
 
-  return (req, res, next) ->
-    if app_info.empty
-      reflectApp req.app
-
-    next()
+  return _.extend middleware,
+    reflectExpress: reflectExpress

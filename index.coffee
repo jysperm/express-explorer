@@ -162,22 +162,32 @@ module.exports = (options = {}) ->
     _.extend specification,
       router: {}
 
-#    onlyMethodChild = (ref) ->
-#      return _.isEmpty _.reject _.keys(ref), (key) ->
-#        return key.toLowerCase() in methods
+    onlyMethodChild = (ref) ->
+      return _.isEmpty _.reject _.keys(ref), (key) ->
+        return key.toLowerCase() in methods
+
+    resolveRootPath = (ref) ->
+      return if onlyMethodChild ref
+
+      ref['/'] ?= {}
+
+      for method in methods
+        method = method.toUpperCase()
+
+        if ref[method]
+          ref['/'][method] = ref[method]
+          delete ref[method]
+
+      for k, v of ref
+        resolveRootPath v
 
     for router in specification.routers
       path_parts = _.compact router.path.split '/'
-#      path_parts = ['/'] if _.isEmpty path_parts
       ref = specification.router
 
       for part in path_parts
         ref[part] ?= {}
         ref = ref[part]
-
-#      unless onlyMethodChild ref
-#        ref['/'] ?= {}
-#        ref = ref['/']
 
       ref[router.method] ?=
         routers: []
@@ -185,6 +195,8 @@ module.exports = (options = {}) ->
       ref[router.method].routers.push _.extend router,
         name: router.handle.name
         middleware_name: router.handle.middleware_name
+
+    resolveRootPath specification.router
 
   reflectExpress = (app) ->
     _.extend specification,

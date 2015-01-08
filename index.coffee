@@ -4,6 +4,7 @@ stacktrace = require 'stack-trace'
 js2coffee = require 'js2coffee'
 methods = require 'methods'
 express = require 'express'
+debug = (require 'debug') 'express-explorer'
 path = require 'path'
 fs = require 'fs'
 _ = require 'underscore'
@@ -54,6 +55,7 @@ module.exports = (options = {}) ->
     next()
 
   createExplorerServer = ->
+    {port, ip} = options
     explorer = express()
 
     explorer.get '/', (req, res) ->
@@ -68,7 +70,34 @@ module.exports = (options = {}) ->
     explorer.use '/assets', express.static __dirname + '/assets'
     explorer.use '/bower_components', express.static __dirname + '/bower_components'
 
-    explorer.listen options.port, options.ip
+    explorer.listen port, ip, ->
+      debug "createExplorerServer: started at #{ip}:#{port}"
+
+  parseHandleName = (callsite, seq) ->
+    line = readFileLine callsite.getFileName(), callsite.getLineNumber()
+
+    formatLine = (name) ->
+      return name
+      .replace /('|")[^'"]+('|"),\s+/, ''  # start with path
+      .replace /\);$/, ''                  # end with );
+      .replace /\{$/, ''                   # end with {
+      .replace /\($/, ''                   # end with (
+      .replace /\s+$/, ''                  # end with spaces
+
+    name = line.match /[use|post|get|put|delete|patch|head|all|options|del|delete"\]]\((.+)?/
+    name = formatLine if name then name[1] else line
+
+    parts = name.split /,(?![^(]*\))/      # `,` not inside `(` and `)`
+
+    if parts[seq]
+      name = formatLine parts[seq]
+      .replace /^\s+/, ''                  # start with spaces
+    else
+      name = 'function(unknown)'
+
+    debug "parseHandleName: got `#{name}` from #{seq} of `#{line}`"
+
+    return name
 
   injectExpress = ->
     app_root = path.resolve options.app_root
@@ -77,27 +106,42 @@ module.exports = (options = {}) ->
       use: express.Router.use
       listen: express.application.listen
 
-    express.Router.use = ->
-      callsite = _.find stacktrace.get()[1 ...], (site) ->
+    injectHandle = (callsites, args) ->
+      callsite = _.find callsites[1 ...], (site) ->
         filename = site.getFileName()
 
         return filename[... app_root.length] == app_root and
-          _.every options.app_excludes, (exclude) ->
-            return !exclude.test filename[app_root.length + 1 ...]
+            _.every options.app_excludes, (exclude) ->
+              return !exclude.test filename[app_root.length + 1 ...]
 
       if callsite
-        _.chain(arguments)
+        _.chain args
         .filter _.isFunction
         .reject (func) -> func.stack
-        .each (func) ->
-          _.extend func,
-            middleware_name: parseMiddlewareName callsite
+        .each (func, i) ->
+          handle_name = parseHandleName callsite, i
 
+          unless handle_name in ['function(req, res)', 'function(unknown)']
+            func.is_middleware = true
+
+          _.extend func,
+            handle_seq: i
+            handle_name: handle_name
+
+    express.Router.use = ->
+      injectHandle stacktrace.get(), arguments
       original.use.apply @, arguments
 
     express.application.listen = ->
       reflectExpress @
       original.listen.apply @, arguments
+
+    methods.concat(['all']).forEach (method) ->
+      original[method] = express.Router[method]
+
+      express.Router[method] = ->
+        injectHandle stacktrace.get(), arguments
+        original[method].apply @, arguments
 
   readPackage = ->
     filename = path.join path.resolve(options.app_root), 'package.json'
@@ -127,17 +171,6 @@ module.exports = (options = {}) ->
     else
       return body.split('\n')[line - 1]
 
-  parseMiddlewareName = (callsite) ->
-    line = readFileLine callsite.getFileName(), callsite.getLineNumber()
-
-    if options.coffeescript
-      return line.match(/use\((.+)?/)[1]
-      .replace /\);$/, ''
-      .replace /\{$/, ''
-      .replace /\s+$/, ''
-    else
-      return line
-
   reflectRouter = (router, base = '/') ->
     for layer in router.stack
       if layer.route
@@ -147,6 +180,7 @@ module.exports = (options = {}) ->
             method: route_layer.method.toUpperCase()
             source: formatSource route_layer.handle
             handle: route_layer.handle
+            is_middleware: route_layer.handle.is_middleware
 
       else if layer.handle.stack
         reflectRouter layer.handle, formatPathRegex(layer.regexp, base)
@@ -154,9 +188,10 @@ module.exports = (options = {}) ->
       else
         specification.middlewares.push
           path: formatPathRegex layer.regexp, base
-          name: if layer.name != '<anonymous>' then layer.name else layer.handle.middleware_name
+          handle_name: if layer.name != '<anonymous>' then layer.name else layer.handle.handle_name
           source: formatSource layer.handle
           handle: layer.handle
+          is_middleware: layer.handle.is_middleware
 
   organizeRouter = ->
     _.extend specification,
@@ -169,12 +204,11 @@ module.exports = (options = {}) ->
     resolveRootPath = (ref) ->
       return if onlyMethodChild ref
 
-      ref['/'] ?= {}
-
       for method in methods
         method = method.toUpperCase()
 
         if ref[method]
+          ref['/'] ?= {}
           ref['/'][method] = ref[method]
           delete ref[method]
 
@@ -189,12 +223,15 @@ module.exports = (options = {}) ->
         ref[part] ?= {}
         ref = ref[part]
 
-      ref[router.method] ?=
-        routers: []
+      ref[router.method] ?= {}
 
-      ref[router.method].routers.push _.extend router,
-        name: router.handle.name
-        middleware_name: router.handle.middleware_name
+      if router.is_middleware
+        ref[router.method].middlewares ?= []
+        ref[router.method].middlewares.push router.handle.handle_name
+      else
+        ref[router.method].routers ?= []
+        ref[router.method].routers.push _.extend router,
+          handle_name: router.handle.handle_name
 
     resolveRootPath specification.router
 

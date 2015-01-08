@@ -23,13 +23,13 @@ Open <http://127.0.0.1:1839> to view API document.
 
 * `ip` only listen `127.0.0.1` by default
 * `port` 1839 by default
-* `app_root` default to current directory
+* `app_root` current directory by default
 * `app_excludes`
 * `coffeescript`
 
-### API
+### Debug Mode
 
-* reflectExpress(app)
+    env DEBUG=express-explorer app.coffee
 
 ### Explorer Web API
 <http://127.0.0.1:1839> by Default.
@@ -42,3 +42,13 @@ Open <http://127.0.0.1:1839> to view API document.
 
 * 必须在使用 express 的任何函数之前实例化 expressExplorer, 以便向 express 注入代码
 * 必须在调用 app.listen 之前添加所有的路由和中间件，因为 express-explorer 会在 app.listen 时收集中间件信息
+
+### TODO
+
+* 直接包含所有中间件的源码
+* 显示路由和中间件前的注释
+* 支持 param 中间件
+* 支持从父路径继承来的中间件
+* 支持在运行时捕捉请求和响应信息
+* 支持 Markdown 输出
+* 支持导入导出状态数据

@@ -57,15 +57,22 @@ module.exports = (options = {}) ->
   createExplorerServer = ->
     {port, ip} = options
     explorer = express()
+    explorer.set 'views', __dirname + '/views'
+
+    markdownGenerator = ->
+
+    fs.readFile __dirname + '/views/markdown.md', (err, body) ->
+      markdownGenerator = _.template body.toString()
 
     explorer.get '/', (req, res) ->
-      res.render __dirname + '/index.jade', specification
+      res.render 'index.jade', specification
 
     explorer.get '/.json', (req, res) ->
       res.json specification
 
     explorer.get '/.markdown', (req, res) ->
-      res.sendStatus 404
+      res.header 'Content-Type', 'text/markdown'
+      res.send markdownGenerator specification
 
     explorer.use '/assets', express.static __dirname + '/assets'
     explorer.use '/bower_components', express.static __dirname + '/bower_components'
@@ -154,12 +161,12 @@ module.exports = (options = {}) ->
 
   formatSource = (func) ->
     if options.coffeescript
-      source = 'f = ' + func.toString()
+      source = '__f = ' + func.toString()
 
       source = js2coffee.build source,
         single_quotes: true
 
-      return source[4 ...]
+      return source[6 ...]
     else
       return jsBeautify func.toString()
 

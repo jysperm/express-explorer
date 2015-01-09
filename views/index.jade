@@ -34,13 +34,13 @@ html
 
         .main.col-md-9.pull-right
           #router
-            each one, index in routers
+            each router, index in routers
               section.route
                 h2
-                  span.method= one.method
-                  span.url= one.path
+                  span.method= router.method
+                  span.url= router.path
                   a.button(data-toggle="collapse" href="#source-#{index}" aria-expanded="false") View Source
-                pre.source.collapse(id="source-#{index}")= one.source
+                pre.source.collapse(id="source-#{index}")= router.source
 
     script(src="/bower_components/jquery/dist/jquery.min.js")
     script(src="/bower_components/bootstrap/dist/js/bootstrap.min.js")

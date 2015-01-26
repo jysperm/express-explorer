@@ -38,6 +38,10 @@ Open <http://127.0.0.1:1839> to view API document.
 * `/.json` JSON Version
 * `/.markdown` Markdown Version
 
+### 原理
+
+* 注入 express 用于注册路由的方法(`use`, `get`, `post`, `all` 等), 获取路由信息
+
 ### 已知问题
 
 * 必须在使用 express 的任何函数之前实例化 expressExplorer, 以便向 express 注入代码

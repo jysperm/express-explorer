@@ -1,39 +1,15 @@
-{js_beautify: jsBeautify} = require 'js-beautify'
-coffeescript = require 'coffee-script'
+debug = (require 'debug') 'express-explorer'
 stacktrace = require 'stack-trace'
-js2coffee = require 'js2coffee'
 methods = require 'methods'
 express = require 'express'
-debug = (require 'debug') 'express-explorer'
 path = require 'path'
 fs = require 'fs'
 _ = require 'underscore'
 
-formatPath = (path) ->
-  unless path
-    return '/'
+utils = require './utils'
 
-  while path[... 2] == '//'
-    path = path[1 ...]
-
-  if path[-1 ...] == '/' and path.length > 1
-    return path[... -1]
-
-  return path
-
-formatPathRegex = (regex, base = '') ->
-  format = ->
-    regex.toString()
-    .replace /^\/\^/, ''
-    .replace /\/i?$/, ''
-    .replace /\\/g, ''
-    .replace '/?(?=/|$)', ''
-    .replace /\/$/, ''
-
-  if regex
-    return formatPath base + format regex
-  else
-    return '/'
+{addToSet, isStartWith, formatPath, formatPathRegex} = utils
+{readPackage, parseHandleName} = utils
 
 module.exports = (options = {}) ->
   options = _.extend {
@@ -44,6 +20,9 @@ module.exports = (options = {}) ->
     coffeescript: true
   }, options
 
+  formatSource = (func) ->
+    return utils.formatSource func, options
+
   specification =
     package: {}
     settings: {}
@@ -51,7 +30,7 @@ module.exports = (options = {}) ->
     routers: []
     router: {}
 
-  middleware = (req, res, next) ->
+  collector = (req, res, next) ->
     next()
 
   createExplorerServer = ->
@@ -79,32 +58,6 @@ module.exports = (options = {}) ->
 
     explorer.listen port, ip, ->
       debug "createExplorerServer: started at #{ip}:#{port}"
-
-  parseHandleName = (callsite, seq) ->
-    line = readFileLine callsite.getFileName(), callsite.getLineNumber()
-
-    formatLine = (name) ->
-      return name
-      .replace /('|")[^'"]+('|"),\s+/, ''  # start with path
-      .replace /\);$/, ''                  # end with );
-      .replace /\{$/, ''                   # end with {
-      .replace /\($/, ''                   # end with (
-      .replace /\s+$/, ''                  # end with spaces
-
-    name = line.match /[use|post|get|put|delete|patch|head|all|options|del|delete"\]]\((.+)?/
-    name = formatLine if name then name[1] else line
-
-    parts = name.split /,(?![^(]*\))/      # `,` not inside `(` and `)`
-
-    if parts[seq]
-      name = formatLine parts[seq]
-      .replace /^\s+/, ''                  # start with spaces
-    else
-      name = 'function(unknown)'
-
-    debug "parseHandleName: got `#{name}` from #{seq} of `#{line}`"
-
-    return name
 
   injectExpress = ->
     app_root = path.resolve options.app_root
@@ -149,34 +102,6 @@ module.exports = (options = {}) ->
       express.Router[method] = ->
         injectHandle stacktrace.get(), arguments
         original[method].apply @, arguments
-
-  readPackage = ->
-    filename = path.join path.resolve(options.app_root), 'package.json'
-
-    fs.exists filename, (exists) ->
-      if exists
-        fs.readFile filename, (err, body) ->
-          unless err
-            specification.package = JSON.parse body
-
-  formatSource = (func) ->
-    if options.coffeescript
-      source = '__f = ' + func.toString()
-
-      source = js2coffee.build source,
-        single_quotes: true
-
-      return source[6 ...]
-    else
-      return jsBeautify func.toString()
-
-  readFileLine = (filename, line) ->
-    body = fs.readFileSync(filename).toString()
-
-    if filename[-6 ...] == 'coffee'
-      return coffeescript.compile(body).split('\n')[line - 1]
-    else
-      return body.split('\n')[line - 1]
 
   reflectRouter = (router, base = '/') ->
     for layer in router.stack
@@ -240,6 +165,12 @@ module.exports = (options = {}) ->
         ref[router.method].routers.push _.extend router,
           handle_name: router.handle.handle_name
 
+      for middleware in specification.middlewares
+        unless middleware.path == '/'
+          if isStartWith router.path, middleware.path
+            ref[router.method].middlewares ?= []
+            addToSet ref[router.method].middlewares, middleware.handle_name
+
     resolveRootPath specification.router
 
   reflectExpress = (app) ->
@@ -253,7 +184,7 @@ module.exports = (options = {}) ->
 
   createExplorerServer()
   injectExpress()
-  readPackage()
+  readPackage specification, options
 
-  return _.extend middleware,
+  return _.extend collector,
     reflectExpress: reflectExpress

@@ -36,7 +36,7 @@ Open <http://127.0.0.1:1839> to view API document.
 
 * `/` HTML Version
 * `/.json` JSON Version
-* `/.markdown` Markdown Version
+* `/.md` Markdown Version
 
 ### 原理
 

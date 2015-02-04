@@ -26,9 +26,7 @@ module.exports = (options = {}) ->
   specification =
     package: {}
     settings: {}
-    middlewares: []
-    routers: []
-    router: {}
+    stacks: []
 
   collector = (req, res, next) ->
     next()
@@ -49,7 +47,7 @@ module.exports = (options = {}) ->
     explorer.get '/.json', (req, res) ->
       res.json specification
 
-    explorer.get '/.markdown', (req, res) ->
+    explorer.get '/.md', (req, res) ->
       res.header 'Content-Type', 'text/markdown'
       res.send markdownGenerator specification
 
@@ -77,12 +75,8 @@ module.exports = (options = {}) ->
       if callsite
         _.chain args
         .filter _.isFunction
-        .reject (func) -> func.stack
         .each (func, i) ->
           handle_name = parseHandleName callsite, i
-
-          unless handle_name in ['function(req, res)', 'function(unknown)']
-            func.is_middleware = true
 
           _.extend func,
             handle_seq: i
@@ -103,88 +97,52 @@ module.exports = (options = {}) ->
         injectHandle stacktrace.get(), arguments
         original[method].apply @, arguments
 
-  reflectRouter = (router, base = '/') ->
-    for layer in router.stack
-      if layer.route
-        for route_layer in layer.route.stack
-          specification.routers.push
-            path: formatPath base + layer.route.path
-            method: route_layer.method.toUpperCase()
-            source: formatSource route_layer.handle
-            handle: route_layer.handle
-            is_middleware: route_layer.handle.is_middleware
-
-      else if layer.handle.stack
-        reflectRouter layer.handle, formatPathRegex(layer.regexp, base)
-
-      else
-        specification.middlewares.push
-          path: formatPathRegex layer.regexp, base
-          handle_name: if layer.name != '<anonymous>' then layer.name else layer.handle.handle_name
-          source: formatSource layer.handle
-          handle: layer.handle
-          is_middleware: layer.handle.is_middleware
-
-  organizeRouter = ->
-    _.extend specification,
-      router: {}
-
-    onlyMethodChild = (ref) ->
-      return _.isEmpty _.reject _.keys(ref), (key) ->
-        return key.toLowerCase() in methods
-
-    resolveRootPath = (ref) ->
-      return if onlyMethodChild ref
-
-      for method in methods
-        method = method.toUpperCase()
-
-        if ref[method]
-          ref['/'] ?= {}
-          ref['/'][method] = ref[method]
-          delete ref[method]
-
-      for k, v of ref
-        resolveRootPath v
-
-    for router in specification.routers
-      path_parts = _.compact router.path.split '/'
-      ref = specification.router
-
-      for part in path_parts
-        ref[part] ?= {}
-        ref = ref[part]
-
-      ref[router.method] ?= {}
-
-      if router.is_middleware
-        ref[router.method].middlewares ?= []
-        ref[router.method].middlewares.push router.handle.handle_name
-      else
-        ref[router.method].routers ?= []
-        ref[router.method].routers.push _.extend router,
-          handle_name: router.handle.handle_name
-
-      for middleware in specification.middlewares
-        unless middleware.path == '/'
-          if isStartWith router.path, middleware.path
-            ref[router.method].middlewares ?= []
-            addToSet ref[router.method].middlewares, middleware.handle_name
-
-    resolveRootPath specification.router
-
   reflectExpress = (app) ->
+    parseRouter = (router, base = '/') ->
+      stacks = []
+
+      handleName = (handle) ->
+        if handle.name and handle.name != '<anonymous>'
+          return handle.name
+        else
+          return handle.handle_name
+
+      for layer in router.stack
+        if layer.route
+          for route_layer in layer.route.stack
+            stacks.push
+              type: 'route'
+              path: formatPath base + layer.route.path
+              method: route_layer.method.toUpperCase()
+              source: formatSource route_layer.handle
+              handle: route_layer.handle
+              handle_seq: route_layer.handle.handle_seq
+              handle_name: handleName route_layer.handle
+
+        else if layer.handle.stack
+          router = parseRouter layer.handle, formatPathRegex(layer.regexp, base)
+
+          stacks.push _.extend router,
+            type: 'router'
+
+        else
+          stacks.push
+            type: 'middleware'
+            path: formatPathRegex layer.regexp, base
+            source: formatSource layer.handle
+            handle: layer.handle
+            handle_seq: layer.handle.handle_seq
+            handle_name: handleName layer.handle
+
+      return stacks
+
     _.extend specification,
       settings: app.settings
-      middlewares: []
-      routers: []
+      stacks: parseRouter app._router
 
-    reflectRouter app._router
-    organizeRouter()
-
+  readPackage specification, options
   createExplorerServer()
   injectExpress()
-  readPackage specification, options
 
   return _.extend collector,
     reflectExpress: reflectExpress

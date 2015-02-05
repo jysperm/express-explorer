@@ -92,3 +92,11 @@ exports.parseHandleName = (callsite, seq) ->
   debug "parseHandleName: got `#{name}` from #{seq} of `#{line}`"
 
   return name
+
+exports.markdownHelpers = (specification) ->
+  return _.extend {}, specification,
+    headerN: (n) ->
+      return ([0 ... n].map -> '#').join ''
+
+    escapeMarkdown: (string) ->
+      return string.replace /_/g, '\\_'

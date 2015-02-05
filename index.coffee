@@ -81,11 +81,12 @@ module.exports = (options = {}) ->
         _.chain args
         .filter _.isFunction
         .each (func, i) ->
-          handle_name = parseHandleName callsite, i
+          {handle_name, comment} = parseHandleName callsite, i
 
           _.extend func,
             handle_seq: i
             handle_name: handle_name
+            comment: comment
 
     express.Router.use = ->
       injectHandle stacktrace.get(), arguments
@@ -121,6 +122,7 @@ module.exports = (options = {}) ->
               method: route_layer.method.toUpperCase()
               source: formatSource route_layer.handle
               handle: route_layer.handle
+              comment: route_layer.handle.comment
               handle_seq: route_layer.handle.handle_seq
               handle_name: handleName route_layer.handle
 

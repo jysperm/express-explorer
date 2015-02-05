@@ -59,16 +59,25 @@ exports.formatSource = (func, options) ->
   else
     return jsBeautify func.toString()
 
-exports.readFileLine = readFileLine = (filename, line) ->
+exports.parseHandleName = (callsite, seq) ->
+  filename = callsite.getFileName()
   body = fs.readFileSync(filename).toString()
+  line_number = callsite.getLineNumber()
 
   if filename[-6 ...] == 'coffee'
-    return coffeescript.compile(body).split('\n')[line - 1]
-  else
-    return body.split('\n')[line - 1]
+    lines = coffeescript.compile(body).split('\n')
+    line = lines[line_number - 1]
 
-exports.parseHandleName = (callsite, seq) ->
-  line = readFileLine callsite.getFileName(), callsite.getLineNumber()
+    comments = []
+
+    for l in lines[... line_number - 1].reverse()
+      if l.match /^\s*#/
+        comments.unshift l
+      else
+        break
+
+  else
+    line = body.split('\n')[line_number - 1]
 
   formatLine = (name) ->
     return name
@@ -91,7 +100,10 @@ exports.parseHandleName = (callsite, seq) ->
 
   debug "parseHandleName: got `#{name}` from #{seq} of `#{line}`"
 
-  return name
+  return {
+    handle_name: name
+    comment: comments.join '\n'
+  }
 
 exports.markdownHelpers = (specification) ->
   return _.extend {}, specification,
